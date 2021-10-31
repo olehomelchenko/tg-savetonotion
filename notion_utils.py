@@ -1,6 +1,7 @@
 import requests
 import logging
 import yaml
+from pprint import pprint
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -11,19 +12,21 @@ logger = logging.getLogger(__name__)
 
 def create_page(token, db_id, message):
     create_page_url = "https://api.notion.com/v1/pages/"
-    name = ""
+    name = "From "
+    if message.forward_sender_name:
+        name = name + message.forward_sender_name
     if message.forward_from:
         name = message.forward_from.first_name
         last_name = message.forward_from.last_name
         username = message.forward_from.username
         username = f" ({username})" if username else ""
-        name = f"Forwarded from {name} {last_name}" + username
+        name = name + f"{name} {last_name}" + username
 
     if message.forward_from_chat:
         chat_title = message.forward_from_chat.title
         chat_username = message.forward_from_chat.username
 
-        name = f"Forwarded from {chat_title} ({chat_username})"
+        name = name + f"from {chat_title} ({chat_username})"
 
         forwarded_from_messageid = message.forward_from_message_id
         forwarded_from_channelid = message.forward_from_chat.username
@@ -35,6 +38,8 @@ def create_page(token, db_id, message):
     if message_dict.get("text"):
         message_dict.pop("text")
     text = message.text_markdown_urled
+    text_list = text.split("\n\n") if text else []
+    # pprint(text_list)
 
     content = yaml.dump(message_dict, allow_unicode=True)
 
@@ -47,23 +52,23 @@ def create_page(token, db_id, message):
                     {"name": "Telegram"},
                 ]
             },
-            "url": {"url": url or "https://example.com"},
+            # "url": {"url": url or "https://example.com"},
         },
         "children": [
-            {
-                "object": "block",
-                "type": "paragraph",
-                "paragraph": {
-                    "text": [
-                        {
-                            "type": "text",
-                            "text": {
-                                "content": text or "",
-                            },
-                        }
-                    ]
-                },
-            },
+            # {
+            #     "object": "block",
+            #     "type": "paragraph",
+            #     "paragraph": {
+            #         "text": [
+            #             {
+            #                 "type": "text",
+            #                 "text": {
+            #                     "content": text or "",
+            #                 },
+            #             }
+            #         ]
+            #     },
+            # },
             {
                 "type": "code",
                 "code": {
@@ -74,6 +79,27 @@ def create_page(token, db_id, message):
         ],
     }
 
+    for chunk in text_list:
+        create_page_data["children"].append(
+            {
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "text": [
+                        {
+                            "type": "text",
+                            "text": {
+                                "content": chunk,
+                            },
+                        }
+                    ]
+                },
+            }
+        )
+
+    if url:
+        create_page_data["properties"]["url"] = {"url": url}
+
     response = requests.post(
         create_page_url,
         json=create_page_data,
@@ -83,4 +109,4 @@ def create_page(token, db_id, message):
         },
     )
 
-    logger.info(response.text)
+    logger.info(response)
