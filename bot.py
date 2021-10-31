@@ -8,6 +8,7 @@ from telegram.ext.commandhandler import CommandHandler
 from telegram.ext.messagehandler import MessageHandler
 from telegram.ext.filters import Filters
 import sqlalchemy as db
+from sqlalchemy.orm import Session
 
 import os
 import logging
@@ -15,6 +16,7 @@ import yaml
 from uuid import uuid1
 
 from db_utils import get_table
+from notion_utils import create_page
 
 TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN")
 
@@ -58,9 +60,7 @@ def notion_token(update: Update, context: CallbackContext):
     logger.info("Token of %s: %s", user.first_name, update.message.text)
 
     query = db.update(tbl).values(notion_token=update.message.text)
-    query.where(
-        tbl.columns.tg_user_id==str(update.message.from_user.id)
-    )
+    query.where(tbl.columns.tg_user_id == str(update.message.from_user.id))
     conn.execute(query)
 
     update.message.reply_text(
@@ -76,9 +76,7 @@ def notion_table_id(update: Update, context: CallbackContext):
     logger.info("Table ID of %s: %s", user.first_name, update.message.text)
 
     query = db.update(tbl).values(notion_db=update.message.text)
-    query.where(
-        tbl.columns.tg_user_id==str(update.message.from_user.id)
-    )
+    query.where(tbl.columns.tg_user_id == str(update.message.from_user.id))
     conn.execute(query)
 
     update.message.reply_text(
@@ -104,9 +102,17 @@ def finish(update: Update, context: CallbackContext):
 
     message_yaml = yaml.dump(message_dict, allow_unicode=True)
 
-    to_notion = {"url": channel_url, "text": message_text, "message_yaml": message_yaml}
-
-    logger.info(to_notion)
+    with Session(engine) as s:
+        res = s.query(tbl).filter_by(tg_user_id=str(update.message.from_user.id)).one()
+        
+        create_page(
+            res.notion_token,
+            res.notion_db,
+            channel_url,
+            message_text,
+            message_yaml,
+        )
+        s.close()
 
     file_id = str(uuid1())
     with open(f"{file_id}.yaml", "w") as file:
