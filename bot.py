@@ -36,7 +36,6 @@ logger = logging.getLogger(__name__)
 
 
 def start(update: Update, context: CallbackContext):
-    reply_keyboard = [["Add Notion Token"]]
     uid = update.message.from_user.id
 
     query = db.insert(tbl).values(tg_user_id=str(uid))
@@ -44,12 +43,8 @@ def start(update: Update, context: CallbackContext):
     logger.info(ResultProxy)
 
     update.message.reply_text(
-        "Hi! Please send notion token below",
-        reply_markup=ReplyKeyboardMarkup(
-            reply_keyboard,
-            one_time_keyboard=True,
-            input_field_placeholder="Notion Token?",
-        ),
+        "Hi! Please send notion integration token."
+        "It can be found using step 1 & 2 of instructions: https://developers.notion.com/docs/getting-started",
     )
 
     return NOTION_TOKEN
@@ -64,8 +59,9 @@ def notion_token(update: Update, context: CallbackContext):
     conn.execute(query)
 
     update.message.reply_text(
-        "Got it! Now I need an ID of the table where you want me to save the messages",
-        reply_markup=ReplyKeyboardRemove(),
+        "Got it! Now I need an ID of the table where you want me to save the messages."
+        "You can find it from URL of the database: `https://www.notion.so/my-base/*DB_ID_HERE*?v=...`"
+        "Your database *must* have these fields: `Name`, `Tags` (multiselect), `URL` (type url)"
     )
 
     return NOTION_TABLE_ID
@@ -80,8 +76,7 @@ def notion_table_id(update: Update, context: CallbackContext):
     conn.execute(query)
 
     update.message.reply_text(
-        "Got it! Now try to forward some messages here",
-        reply_markup=ReplyKeyboardRemove(),
+        "Got it! Now try to forward some messages here and they'll appear in your database!"
     )
 
     return FINISH
@@ -104,7 +99,7 @@ def finish(update: Update, context: CallbackContext):
 
     with Session(engine) as s:
         res = s.query(tbl).filter_by(tg_user_id=str(update.message.from_user.id)).one()
-        
+
         create_page(
             res.notion_token,
             res.notion_db,
