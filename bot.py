@@ -146,7 +146,19 @@ def finish(update: Update, context: CallbackContext):
     logger.info("trigger: finish")
 
     with Session(engine) as s:
-        res = s.query(tbl).filter_by(tg_user_id=str(update.message.from_user.id)).one()
+        try:
+            res = (
+                s.query(tbl)
+                .filter_by(tg_user_id=str(update.message.from_user.id))
+                .one()
+            )
+            logger.info(f"Found user {res}")
+        except NoResultFound:
+            update.message.reply_text(
+                "We don't have any records of you. Would you like to set things up?",
+                reply_markup=ReplyKeyboardMarkup([["Start"]], one_time_keyboard=True),
+            )
+            return
         try:
             create_page(res.notion_token, res.notion_db, update.message)
         except Exception as e:
@@ -186,6 +198,7 @@ def main():
     conv_handler = ConversationHandler(
         entry_points=[
             CommandHandler("start", start),
+            MessageHandler(Filters.regex("^Start$"), start),
             MessageHandler(Filters.all, finish),
         ],
         states={
@@ -203,11 +216,6 @@ def main():
     )
 
     dispatcher.add_handler(conv_handler)
-    # dispatcher.add_handler(CommandHandler("start", start))
-    # dispatcher.add_handler(
-
-    # )
-    # dispatcher.add_handler(MessageHandler(Filters.all, finish))
 
     # Start the Bot
     updater.start_polling()
