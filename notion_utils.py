@@ -1,5 +1,6 @@
 import requests
 import logging
+import yaml
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -8,8 +9,18 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def create_page(token, db_id, url, text, content=None):
+def create_page(token, db_id, message):
     create_page_url = "https://api.notion.com/v1/pages/"
+
+
+
+    forwarded_from_messageid = message.forward_from_message_id
+    forwarded_from_channelid = message.forward_from_chat.username
+    url = f"https://t.me/{forwarded_from_channelid}/{forwarded_from_messageid}"
+
+    content = yaml.dump(message.to_dict(), allow_unicode=True)
+
+    text = message.text
 
     create_page_data = {
         "parent": {"database_id": db_id},

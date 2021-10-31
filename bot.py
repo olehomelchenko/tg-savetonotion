@@ -85,37 +85,18 @@ def notion_table_id(update: Update, context: CallbackContext):
 def finish(update: Update, context: CallbackContext):
     logger.info("finished")
 
-    message = update.message
-
-    forwarded_from_messageid = message.forward_from_message_id
-    forwarded_from_channelid = message.forward_from_chat.username
-    channel_url = f"https://t.me/{forwarded_from_channelid}/{forwarded_from_messageid}"
-
-    message_dict = message.to_dict()
-
-    message_text = message_dict.get("text")
-
-    message_yaml = yaml.dump(message_dict, allow_unicode=True)
-
     with Session(engine) as s:
         res = s.query(tbl).filter_by(tg_user_id=str(update.message.from_user.id)).one()
 
         create_page(
             res.notion_token,
             res.notion_db,
-            channel_url,
-            message_text,
-            message_yaml,
+            update.message
         )
         s.close()
 
-    file_id = str(uuid1())
-    with open(f"{file_id}.yaml", "w") as file:
-        yaml.dump(message_dict, file, allow_unicode=True)
-
     update.message.reply_text(
-        "that's all, now try to forward any message here",
-        reply_markup=ReplyKeyboardRemove(),
+        "Saved successfully!"
     )
 
     return ConversationHandler.END
