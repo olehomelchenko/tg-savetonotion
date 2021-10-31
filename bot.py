@@ -23,7 +23,7 @@ sql_string = os.environ.get("PG_STRING")
 PG_TABLE_NAME = os.getenv("PG_TABLE_NAME")
 engine = db.create_engine(sql_string)
 
-NOTION_TOKEN, NOTION_TABLE_ID, FINISH = range(3)
+SETUP, NOTION_TOKEN, NOTION_TABLE_ID, FINISH = range(4)
 
 tbl = get_table(engine, PG_TABLE_NAME)
 
@@ -35,8 +35,8 @@ logger = logging.getLogger(__name__)
 
 
 def start(update: Update, context: CallbackContext):
+    logger.info("trigger: start")
     uid = update.message.from_user.id
-
     try:
         s = Session(engine)
         user = s.query(tbl).filter_by(tg_user_id=str(update.message.from_user.id)).one()
@@ -44,19 +44,25 @@ def start(update: Update, context: CallbackContext):
         s.close()
         if not user.notion_token:
             update.message.reply_text(
-                "You don't have a Notion Integration Token! Please send enter it below"
+                "You don't have a Notion Integration Token! Please send enter it below",
+                reply_markup=ReplyKeyboardMarkup([["Set Notion Token"]]),
+                one_time_keyboard=True,
+                input_field_placeholder="input field placeholder?",
             )
-            return NOTION_TOKEN
+            return
         if not user.notion_db:
             update.message.reply_text(
-                "You didn't specify a Notion DB ID! Please enter it below"
+                "You don't have a Notion DB ID! Please send enter it below",
+                reply_markup=ReplyKeyboardMarkup([["Set Notion Database"]]),
+                one_time_keyboard=True,
+                input_field_placeholder="input field placeholder?",
             )
-            return NOTION_TABLE_ID
+            return
         update.message.reply_text(
             "Looks like I have both Integration Token and Database ID."
             "Try to forward some messages here and they'll appear in your database!"
         )
-        return FINISH
+        return
     except NoResultFound:
 
         conn = engine.connect()
@@ -73,7 +79,27 @@ def start(update: Update, context: CallbackContext):
     return NOTION_TOKEN
 
 
+def setup(update: Update, context: CallbackContext):
+    logger.info("trigger: setup")
+    s = Session(engine)
+    user = s.query(tbl).filter_by(tg_user_id=str(update.message.from_user.id)).one()
+    s.close()
+    if update.message.text == "Set Notion Token":
+        reply_text = (
+            f"Your current token is {user.notion_token}. \nEnter your new one below"
+        )
+        return_state = NOTION_TOKEN
+    if update.message.text == "Set Notion Database":
+        reply_text = (
+            f"Your current token is {user.notion_db}. \nEnter your new one below"
+        )
+        return_state = NOTION_TABLE_ID
+    update.message.reply_markdown(reply_text)
+    return return_state
+
+
 def notion_token(update: Update, context: CallbackContext):
+    logger.info("trigger: notion_token")
     user = update.message.from_user
     logger.info("Token of %s: %s", user.first_name, update.message.text)
 
@@ -96,6 +122,7 @@ def notion_token(update: Update, context: CallbackContext):
 
 
 def notion_table_id(update: Update, context: CallbackContext):
+    logger.info("trigger: notion_table_id")
     user = update.message.from_user
     logger.info("Table ID of %s: %s", user.first_name, update.message.text)
 
@@ -116,20 +143,33 @@ def notion_table_id(update: Update, context: CallbackContext):
 
 
 def finish(update: Update, context: CallbackContext):
-    logger.info("finished")
+    logger.info("trigger: finish")
 
     with Session(engine) as s:
         res = s.query(tbl).filter_by(tg_user_id=str(update.message.from_user.id)).one()
+        try:
+            create_page(res.notion_token, res.notion_db, update.message)
+        except Exception as e:
 
-        create_page(res.notion_token, res.notion_db, update.message)
+            reply_keyboard = [["Set Notion Token", "Set Notion Database"]]
+            update.message.reply_text(
+                "Error saving to Notion. Check if your token and db are correct",
+                reply_markup=ReplyKeyboardMarkup(
+                    reply_keyboard,
+                    one_time_keyboard=True,
+                    input_field_placeholder="input field placeholder?",
+                ),
+            )
+            return SETUP
         s.close()
 
     update.message.reply_text("Saved successfully!")
 
-    return ConversationHandler.END
+    return FINISH
 
 
 def cancel(update: Update, context: CallbackContext):
+    logger.info("trigger: cancel")
     """Cancels and ends the conversation."""
     user = update.message.from_user
     logger.info("User %s canceled the conversation.", user.first_name)
@@ -146,17 +186,28 @@ def main():
     conv_handler = ConversationHandler(
         entry_points=[
             CommandHandler("start", start),
-            MessageHandler(Filters.forwarded, finish),
+            MessageHandler(Filters.all, finish),
         ],
         states={
             NOTION_TOKEN: [MessageHandler(Filters.regex("^(.+)$"), notion_token)],
+            SETUP: [
+                MessageHandler(Filters.regex("^Set Notion (Token|Database)$"), setup)
+            ],
             NOTION_TABLE_ID: [MessageHandler(Filters.regex("^(.+)$"), notion_table_id)],
-            FINISH: [MessageHandler(Filters.forwarded, finish)],
+            FINISH: [
+                MessageHandler(Filters.forwarded, finish),
+                MessageHandler(Filters.all, finish),
+            ],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
 
     dispatcher.add_handler(conv_handler)
+    # dispatcher.add_handler(CommandHandler("start", start))
+    # dispatcher.add_handler(
+
+    # )
+    # dispatcher.add_handler(MessageHandler(Filters.all, finish))
 
     # Start the Bot
     updater.start_polling()
