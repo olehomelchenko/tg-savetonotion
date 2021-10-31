@@ -13,6 +13,9 @@ logger = logging.getLogger(__name__)
 def create_page(token, db_id, message):
     create_page_url = "https://api.notion.com/v1/pages/"
     name = "From "
+    if message.location:
+        name = "Location"
+
     if message.forward_sender_name:
         name = name + message.forward_sender_name
     if message.forward_from:
@@ -52,31 +55,8 @@ def create_page(token, db_id, message):
                     {"name": "Telegram"},
                 ]
             },
-            # "url": {"url": url or "https://example.com"},
         },
-        "children": [
-            # {
-            #     "object": "block",
-            #     "type": "paragraph",
-            #     "paragraph": {
-            #         "text": [
-            #             {
-            #                 "type": "text",
-            #                 "text": {
-            #                     "content": text or "",
-            #                 },
-            #             }
-            #         ]
-            #     },
-            # },
-            {
-                "type": "code",
-                "code": {
-                    "text": [{"type": "text", "text": {"content": content or ""}}],
-                    "language": "yaml",
-                },
-            },
-        ],
+        "children": [],
     }
 
     for chunk in text_list:
@@ -97,8 +77,18 @@ def create_page(token, db_id, message):
             }
         )
 
+    create_page_data["children"].append(
+        {
+            "type": "code",
+            "code": {
+                "text": [{"type": "text", "text": {"content": content or ""}}],
+                "language": "yaml",
+            },
+        },
+    )
+
     if url:
-        create_page_data["properties"]["url"] = {"url": url}
+        create_page_data["properties"]["URL"] = {"url": url}
 
     response = requests.post(
         create_page_url,
@@ -108,5 +98,8 @@ def create_page(token, db_id, message):
             "Notion-Version": "2021-08-16",
         },
     )
+
+    if response.status_code != 200:
+        raise Exception(f"Error: {response.text}")
 
     logger.info(response)
