@@ -21,12 +21,13 @@ from notion_utils import create_page
 TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN")
 
 sql_string = os.environ.get("PG_STRING")
+PG_TABLE_NAME = os.getenv("PG_TABLE_NAME")
 engine = db.create_engine(sql_string)
 conn = engine.connect()
 
 NOTION_TOKEN, NOTION_TABLE_ID, FINISH = range(3)
 
-tbl = get_table(engine, conn, "notion_saver_dev")
+tbl = get_table(engine, conn, PG_TABLE_NAME)
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -42,7 +43,7 @@ def start(update: Update, context: CallbackContext):
     ResultProxy = conn.execute(query)
     logger.info(ResultProxy)
 
-    update.message.reply_text(
+    update.message.reply_markdown(
         "Hi! Please send notion integration token."
         "It can be found using step 1 & 2 of instructions: https://developers.notion.com/docs/getting-started",
     )
@@ -58,10 +59,10 @@ def notion_token(update: Update, context: CallbackContext):
     query.where(tbl.columns.tg_user_id == str(update.message.from_user.id))
     conn.execute(query)
 
-    update.message.reply_text(
+    update.message.reply_markdown(
         "Got it! Now I need an ID of the table where you want me to save the messages."
         "You can find it from URL of the database: `https://www.notion.so/my-base/*DB_ID_HERE*?v=...`"
-        "Your database *must* have these fields: `Name`, `Tags` (multiselect), `URL` (type url)"
+        "Your database *must* have these fields: `Name`, `Tags` (multiselect), `URL` (type url) - all case-sensitive."
     )
 
     return NOTION_TABLE_ID
@@ -75,7 +76,7 @@ def notion_table_id(update: Update, context: CallbackContext):
     query.where(tbl.columns.tg_user_id == str(update.message.from_user.id))
     conn.execute(query)
 
-    update.message.reply_text(
+    update.message.reply_markdown(
         "Got it! Now try to forward some messages here and they'll appear in your database!"
     )
 
