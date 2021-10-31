@@ -9,11 +9,10 @@ from telegram.ext.messagehandler import MessageHandler
 from telegram.ext.filters import Filters
 import sqlalchemy as db
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.exc import NoResultFound
 
 import os
 import logging
-import yaml
-from uuid import uuid1
 
 from db_utils import get_table
 from notion_utils import create_page
@@ -23,11 +22,10 @@ TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN")
 sql_string = os.environ.get("PG_STRING")
 PG_TABLE_NAME = os.getenv("PG_TABLE_NAME")
 engine = db.create_engine(sql_string)
-conn = engine.connect()
 
 NOTION_TOKEN, NOTION_TABLE_ID, FINISH = range(3)
 
-tbl = get_table(engine, conn, PG_TABLE_NAME)
+tbl = get_table(engine, PG_TABLE_NAME)
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -39,9 +37,33 @@ logger = logging.getLogger(__name__)
 def start(update: Update, context: CallbackContext):
     uid = update.message.from_user.id
 
-    query = db.insert(tbl).values(tg_user_id=str(uid))
-    ResultProxy = conn.execute(query)
-    logger.info(ResultProxy)
+    try:
+        s = Session(engine)
+        user = s.query(tbl).filter_by(tg_user_id=str(update.message.from_user.id)).one()
+        logger.info(f"user {user} exists")
+        s.close()
+        if not user.notion_token:
+            update.message.reply_text(
+                "You don't have a Notion Integration Token! Please send enter it below"
+            )
+            return NOTION_TOKEN
+        if not user.notion_db:
+            update.message.reply_text(
+                "You didn't specify a Notion DB ID! Please enter it below"
+            )
+            return NOTION_TABLE_ID
+        update.message.reply_text(
+            "Looks like I have both Integration Token and Database ID."
+            "Try to forward some messages here and they'll appear in your database!"
+        )
+        return FINISH
+    except NoResultFound:
+
+        conn = engine.connect()
+        query = db.insert(tbl).values(tg_user_id=str(uid))
+        ResultProxy = conn.execute(query)
+        logger.info(ResultProxy)
+        conn.close()
 
     update.message.reply_markdown(
         "Hi! Please send notion integration token."
@@ -55,9 +77,14 @@ def notion_token(update: Update, context: CallbackContext):
     user = update.message.from_user
     logger.info("Token of %s: %s", user.first_name, update.message.text)
 
-    query = db.update(tbl).values(notion_token=update.message.text)
-    query.where(tbl.columns.tg_user_id == str(update.message.from_user.id))
+    conn = engine.connect()
+    query = (
+        db.update(tbl)
+        .values(notion_token=update.message.text)
+        .where(tbl.columns.tg_user_id == str(update.message.from_user.id))
+    )
     conn.execute(query)
+    conn.close()
 
     update.message.reply_markdown(
         "Got it! Now I need an ID of the table where you want me to save the messages."
@@ -72,9 +99,14 @@ def notion_table_id(update: Update, context: CallbackContext):
     user = update.message.from_user
     logger.info("Table ID of %s: %s", user.first_name, update.message.text)
 
-    query = db.update(tbl).values(notion_db=update.message.text)
-    query.where(tbl.columns.tg_user_id == str(update.message.from_user.id))
+    conn = engine.connect()
+    query = (
+        db.update(tbl)
+        .values(notion_db=update.message.text)
+        .where(tbl.columns.tg_user_id == str(update.message.from_user.id))
+    )
     conn.execute(query)
+    conn.close()
 
     update.message.reply_markdown(
         "Got it! Now try to forward some messages here and they'll appear in your database!"
@@ -89,16 +121,10 @@ def finish(update: Update, context: CallbackContext):
     with Session(engine) as s:
         res = s.query(tbl).filter_by(tg_user_id=str(update.message.from_user.id)).one()
 
-        create_page(
-            res.notion_token,
-            res.notion_db,
-            update.message
-        )
+        create_page(res.notion_token, res.notion_db, update.message)
         s.close()
 
-    update.message.reply_text(
-        "Saved successfully!"
-    )
+    update.message.reply_text("Saved successfully!")
 
     return ConversationHandler.END
 

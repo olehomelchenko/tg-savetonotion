@@ -12,11 +12,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def get_table(engine, conn, table_name):
+def get_table(engine, table_name):
 
     try:
         tbl = db.Table(table_name, metadata, autoload=True, autoload_with=engine)
-        logger.info("table exists, connecting to existing table")
+        logger.info(f"table exists, connecting to existing table {tbl}")
         return tbl
     except NoSuchTableError as e:
         tbl = db.Table(
@@ -34,6 +34,5 @@ def get_table(engine, conn, table_name):
             db.Column("tg_user_id", db.String(50), nullable=False),
         )
         metadata.create_all(engine)
-        logger.info("created table")
+        logger.info(f"created table {tbl}")
         return tbl
-
