@@ -1,0 +1,15 @@
+version: "3"
+
+services:
+  bot:
+    build:
+      context: "."
+      dockerfile: Dockerfile
+    environment:
+      - TG_BOT_TOKEN=${TG_BOT_TOKEN}
+      - PG_STRING=${PG_STRING}
+      - PG_TABLE_NAME=${PG_TABLE_NAME}
+    # volumes:
+    #   - "/codebase:/codebase"
+    #   - "/storage:/storage"
+    restart: always
