@@ -37,6 +37,8 @@ def start(update: Update, context: CallbackContext):
     try:
         user = db_utils.get_user(update.message.from_user.id, tbl)
         logger.info(f"user {user.tg_user_id} exists")
+        reply_text = "Welcome back!"
+        reply_kbd = None
         if not user.notion_token:
             reply_text = (
                 "You don't have a Notion Integration Token! Please send enter it below"
@@ -49,9 +51,7 @@ def start(update: Update, context: CallbackContext):
             reply_kbd = [["Set Notion Database"]]
         update.message.reply_text(
             reply_text,
-            reply_markup=ReplyKeyboardMarkup(reply_kbd),
-            one_time_keyboard=True,
-            input_field_placeholder="input field placeholder?",
+            reply_markup=ReplyKeyboardMarkup(reply_kbd) if reply_kbd else None,
         )
         return
     except NoResultFound:
