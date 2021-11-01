@@ -14,7 +14,7 @@ from sqlalchemy.orm.exc import NoResultFound
 import os
 import logging
 
-from db_utils import get_table, get_user, create_user, update_user
+import db_utils
 from notion_utils import create_page
 
 TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN")
@@ -22,7 +22,7 @@ TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN")
 
 SETUP, NOTION_TOKEN, NOTION_TABLE_ID, FINISH = range(4)
 
-tbl = get_table()
+tbl = db_utils.get_or_create_table()
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -33,10 +33,9 @@ logger = logging.getLogger(__name__)
 
 def start(update: Update, context: CallbackContext):
     logger.info("trigger: start")
-    uid = update.message.from_user.id
 
     try:
-        user = get_user(uid)
+        user = db_utils.get_user(update.message.from_user.id, tbl)
         logger.info(f"user {user.tg_user_id} exists")
         if not user.notion_token:
             reply_text = (
@@ -56,7 +55,7 @@ def start(update: Update, context: CallbackContext):
         )
         return
     except NoResultFound:
-        create_user(uid)
+        db_utils.create_user(update.message.from_user.id, tbl)
 
         update.message.reply_markdown(
             "Hi! Please send notion integration token."
@@ -71,7 +70,7 @@ def setup(update: Update, context: CallbackContext):
 
     uid = update.message.from_user.id
 
-    user = get_user(uid)
+    user = db_utils.get_user(uid, tbl)
 
     if update.message.text == "Set Notion Token":
         reply_text = (
@@ -91,7 +90,7 @@ def notion_token(update: Update, context: CallbackContext):
     logger.info("trigger: notion_token")
 
     uid = update.message.from_user.id
-    update_user(uid, notion_token=update.message.text)
+    db_utils.update_user(uid, tbl, notion_token=update.message.text)
 
     update.message.reply_markdown(
         "Got it! Now I need an ID of the table where you want me to save the messages."
@@ -108,7 +107,7 @@ def notion_table_id(update: Update, context: CallbackContext):
     logger.info("Table ID of %s: %s", user.first_name, update.message.text)
 
     uid = update.message.from_user.id
-    update_user(uid, notion_db=update.message.text)
+    db_utils.update_user(uid, tbl, notion_db=update.message.text)
 
     update.message.reply_markdown(
         "Got it! Now try to forward some messages here and they'll appear in your database!"
@@ -122,7 +121,7 @@ def finish(update: Update, context: CallbackContext):
 
     uid = update.message.from_user.id
     try:
-        user = get_user(uid)
+        user = db_utils.get_user(uid, tbl)
     except NoResultFound:
 
         update.message.reply_text(
@@ -148,16 +147,6 @@ def finish(update: Update, context: CallbackContext):
     update.message.reply_text("Saved successfully!")
 
     return FINISH
-
-
-# def cancel(update: Update, context: CallbackContext):
-#     logger.info("trigger: cancel")
-#     """Cancels and ends the conversation."""
-#     user = update.message.from_user
-#     logger.info("User %s canceled the conversation.", user.first_name)
-#     update.message.reply_text("Cancel initiated", reply_markup=ReplyKeyboardRemove())
-
-#     return ConversationHandler.END
 
 
 def main():

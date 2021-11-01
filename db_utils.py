@@ -20,11 +20,15 @@ logger = logging.getLogger(__name__)
 
 
 def get_table():
+    return db.Table(PG_TABLE_NAME, metadata, autoload=True, autoload_with=engine)
+
+
+def get_or_create_table():
 
     table_name = PG_TABLE_NAME
 
     try:
-        tbl = db.Table(table_name, metadata, autoload=True, autoload_with=engine)
+        tbl = get_table()
         logger.info(f"table exists, connecting to existing table {tbl}")
         return tbl
     except NoSuchTableError as e:
@@ -47,9 +51,9 @@ def get_table():
         return tbl
 
 
-def get_user(uid):
+def get_user(uid, tbl):
     s = Session(engine)
-    tbl = get_table()
+    tbl = tbl
 
     user = s.query(tbl).filter_by(tg_user_id=str(uid)).one()
 
@@ -58,9 +62,9 @@ def get_user(uid):
     return user
 
 
-def create_user(uid):
+def create_user(uid, tbl):
 
-    tbl = get_table()
+    tbl = tbl
 
     conn = engine.connect()
     query = db.insert(tbl).values(tg_user_id=str(uid))
@@ -68,13 +72,10 @@ def create_user(uid):
     logger.info(f"Created user {ResultProxy}")
     conn.close()
 
-def update_user(uid, **kwargs):
-    tbl = get_table()
+
+def update_user(uid, tbl, **kwargs):
+    tbl = tbl
     conn = engine.connect()
-    query = (
-        db.update(tbl)
-        .values(**kwargs)
-        .where(tbl.columns.tg_user_id == str(uid))
-    )
+    query = db.update(tbl).values(**kwargs).where(tbl.columns.tg_user_id == str(uid))
     conn.execute(query)
     conn.close()
