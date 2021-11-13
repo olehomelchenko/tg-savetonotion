@@ -1,7 +1,7 @@
 import requests
 import logging
 import yaml
-from pprint import pprint
+import re
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 def create_page(token, db_id, message):
     create_page_url = "https://api.notion.com/v1/pages/"
     name = "From "
+
+    url = None
     if message.location:
         name = "Location"
 
@@ -33,18 +35,17 @@ def create_page(token, db_id, message):
 
         forwarded_from_messageid = message.forward_from_message_id
         forwarded_from_channelid = message.forward_from_chat.username
-        url = f"https://t.me/{forwarded_from_channelid}/{forwarded_from_messageid}"
-    else:
-        url = None
 
+        # if forwarded from channel and the message can have URL, generate the URL and fill the field later
+        url = f"https://t.me/{forwarded_from_channelid}/{forwarded_from_messageid}"
+
+    # Generate a dictionary with message metadata and later send it to Notion
     message_dict = message.to_dict()
+
+    # if the message has text, remove it from the metadata object
     if message_dict.get("text"):
         message_dict.pop("text")
     text = message.text_markdown_urled
-    text_list = text.split("\n\n") if text else []
-    # pprint(text_list)
-
-    content = yaml.dump(message_dict, allow_unicode=True)
 
     create_page_data = {
         "parent": {"database_id": db_id},
@@ -59,6 +60,59 @@ def create_page(token, db_id, message):
         "children": [],
     }
 
+    """
+    Look for markdown links in the text. The regexp should match every
+    link like this: "[some text](https://some-link.com)", and return a list of two elements for
+    each link.
+    """
+
+    links = re.findall(r"\[(.*)\]\((.*)\)", text)
+
+    if len(links) > 0:
+        # If text has markdown links, add the text regarding that
+
+        create_page_data["children"].append(
+            {
+                "type": "heading_3",
+                "heading_3": {
+                    "text": [
+                        {"type": "text", "text": {"content": "Links in the article:"}}
+                    ]
+                },
+            }
+        )
+
+        # for each link, add it as separate paragraph
+        for lnk in links:
+            md_text = lnk[0].strip().replace("\u200b", "") or lnk[1]
+            md_url = lnk[1]
+            print(md_text, md_url)
+
+            create_page_data["children"].append(
+                {
+                    "type": "paragraph",
+                    "paragraph": {
+                        "text": [
+                            {
+                                "type": "text",
+                                "plain_text": md_text,
+                                "href": md_url,
+                                "text": {
+                                    "content": md_text,
+                                    "link": {"url": md_url},
+                                },
+                            }
+                        ]
+                    },
+                }
+            )
+
+        create_page_data["children"].append({"type": "divider", "divider": {}})
+    """
+    If the text is too big, you won't be able to send it in one piece to Notion.
+    So this part of the script splits large texts by paragraph and sends as separate blocks
+    """
+    text_list = text.split("\n\n") if text else []
     for chunk in text_list:
         create_page_data["children"].append(
             {
@@ -77,6 +131,11 @@ def create_page(token, db_id, message):
             }
         )
 
+    create_page_data["children"].append({"type": "divider", "divider": {}})
+
+    # Send metadata regarding the post as formatted yaml code
+
+    content = yaml.dump(message_dict, allow_unicode=True)
     create_page_data["children"].append(
         {
             "type": "code",
@@ -89,6 +148,8 @@ def create_page(token, db_id, message):
 
     if url:
         create_page_data["properties"]["URL"] = {"url": url}
+    elif len(links) > 0:
+        create_page_data["properties"]["URL"] = {"url": links[0][1]}
 
     response = requests.post(
         create_page_url,
