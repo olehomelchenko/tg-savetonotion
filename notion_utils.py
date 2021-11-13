@@ -45,7 +45,9 @@ def create_page(token, db_id, message):
     # if the message has text, remove it from the metadata object
     if message_dict.get("text"):
         message_dict.pop("text")
-    text = message.text_markdown_urled
+    if message_dict.get("caption"):
+        message_dict.pop("caption")
+    text = message.text_markdown_urled or message.caption_markdown_urled
 
     create_page_data = {
         "parent": {"database_id": db_id},
@@ -86,7 +88,6 @@ def create_page(token, db_id, message):
         for lnk in links:
             md_text = lnk[0].strip().replace("\u200b", "") or lnk[1]
             md_url = lnk[1]
-            print(md_text, md_url)
 
             create_page_data["children"].append(
                 {
