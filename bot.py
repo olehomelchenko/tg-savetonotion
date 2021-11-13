@@ -133,6 +133,8 @@ def finish(update: Update, context: CallbackContext):
         create_page(user.notion_token, user.notion_db, update.message)
     except Exception as e:
 
+        logger.error(f"Exception: {e}")
+
         reply_keyboard = [["Set Notion Token", "Set Notion Database"]]
         update.message.reply_text(
             "Error saving to Notion. Check if your token and db are correct",
