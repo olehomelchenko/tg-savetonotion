@@ -9,6 +9,71 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+def add_links_blocks(links, children_block):
+
+    if len(links) > 0:
+        # If text has markdown links, add the text regarding that
+
+        children_block.append(
+            {
+                "type": "heading_3",
+                "heading_3": {
+                    "text": [
+                        {"type": "text", "text": {"content": "Links in the article:"}}
+                    ]
+                },
+            }
+        )
+
+        # for each link, add it as separate paragraph
+        for lnk in links:
+            md_text = lnk[0].strip().replace("\u200b", "") or lnk[1]
+            md_url = lnk[1]
+
+            children_block.append(
+                {
+                    "type": "paragraph",
+                    "paragraph": {
+                        "text": [
+                            {
+                                "type": "text",
+                                "plain_text": md_text,
+                                "href": md_url,
+                                "text": {
+                                    "content": md_text,
+                                    "link": {"url": md_url},
+                                },
+                            }
+                        ]
+                    },
+                }
+            )
+
+        children_block.append({"type": "divider", "divider": {}})
+
+
+def add_splitted_text(text, children_block):
+    
+    text_list = text.split("\n\n") if text else []
+    for chunk in text_list:
+        children_block.append(
+            {
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "text": [
+                        {
+                            "type": "text",
+                            "text": {
+                                "content": chunk,
+                            },
+                        }
+                    ]
+                },
+            }
+        )
+
+    children_block.append({"type": "divider", "divider": {}})
 
 def create_page(token, db_id, message):
     create_page_url = "https://api.notion.com/v1/pages/"
@@ -61,78 +126,20 @@ def create_page(token, db_id, message):
         },
         "children": [],
     }
-
+    
     """
     Look for markdown links in the text. The regexp should match every
-    link like this: "[some text](https://some-link.com)", and return a list of two elements for
+    link like this: "[some text](https://some-link.com)", and process a list of two elements for
     each link.
     """
-
     links = re.findall(r"\[(.*)\]\((.*)\)", text)
+    add_links_blocks(links, create_page_data['children'])
 
-    if len(links) > 0:
-        # If text has markdown links, add the text regarding that
-
-        create_page_data["children"].append(
-            {
-                "type": "heading_3",
-                "heading_3": {
-                    "text": [
-                        {"type": "text", "text": {"content": "Links in the article:"}}
-                    ]
-                },
-            }
-        )
-
-        # for each link, add it as separate paragraph
-        for lnk in links:
-            md_text = lnk[0].strip().replace("\u200b", "") or lnk[1]
-            md_url = lnk[1]
-
-            create_page_data["children"].append(
-                {
-                    "type": "paragraph",
-                    "paragraph": {
-                        "text": [
-                            {
-                                "type": "text",
-                                "plain_text": md_text,
-                                "href": md_url,
-                                "text": {
-                                    "content": md_text,
-                                    "link": {"url": md_url},
-                                },
-                            }
-                        ]
-                    },
-                }
-            )
-
-        create_page_data["children"].append({"type": "divider", "divider": {}})
     """
     If the text is too big, you won't be able to send it in one piece to Notion.
     So this part of the script splits large texts by paragraph and sends as separate blocks
     """
-    text_list = text.split("\n\n") if text else []
-    for chunk in text_list:
-        create_page_data["children"].append(
-            {
-                "object": "block",
-                "type": "paragraph",
-                "paragraph": {
-                    "text": [
-                        {
-                            "type": "text",
-                            "text": {
-                                "content": chunk,
-                            },
-                        }
-                    ]
-                },
-            }
-        )
-
-    create_page_data["children"].append({"type": "divider", "divider": {}})
+    add_splitted_text(text, create_page_data['children'])
 
     # Send metadata regarding the post as formatted yaml code
 
