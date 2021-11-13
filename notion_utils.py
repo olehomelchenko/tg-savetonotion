@@ -9,6 +9,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+
 def add_links_blocks(links, children_block):
 
     if len(links) > 0:
@@ -53,7 +54,7 @@ def add_links_blocks(links, children_block):
 
 
 def add_splitted_text(text, children_block):
-    
+
     text_list = text.split("\n\n") if text else []
     for chunk in text_list:
         children_block.append(
@@ -74,6 +75,27 @@ def add_splitted_text(text, children_block):
         )
 
     children_block.append({"type": "divider", "divider": {}})
+
+
+def add_entities(entities, children_block):
+    if len(entities) > 0:
+        children_block.append(
+            {
+                "type": "heading_3",
+                "heading_3": {
+                    "text": [
+                        {
+                            "type": "text",
+                            "text": {"content": "Entities in the article:"},
+                        }
+                    ]
+                },
+            }
+        )
+
+    for e in entities:
+        children_block.append({"type": "bookmark", "bookmark": {"url": e.url}})
+
 
 def create_page(token, db_id, message):
     create_page_url = "https://api.notion.com/v1/pages/"
@@ -112,7 +134,8 @@ def create_page(token, db_id, message):
         message_dict.pop("text")
     if message_dict.get("caption"):
         message_dict.pop("caption")
-    text = message.text_markdown_urled or message.caption_markdown_urled
+    text_markdown = message.text_markdown_urled or message.caption_markdown_urled
+    text = message.text or message.caption
 
     create_page_data = {
         "parent": {"database_id": db_id},
@@ -126,23 +149,27 @@ def create_page(token, db_id, message):
         },
         "children": [],
     }
-    
+
     """
     Look for markdown links in the text. The regexp should match every
     link like this: "[some text](https://some-link.com)", and process a list of two elements for
     each link.
     """
-    links = re.findall(r"\[(.*)\]\((.*)\)", text)
-    add_links_blocks(links, create_page_data['children'])
+    links = re.findall(r"\[(.*)\]\((.*)\)", text_markdown)
+    add_links_blocks(links, create_page_data["children"])
 
     """
     If the text is too big, you won't be able to send it in one piece to Notion.
     So this part of the script splits large texts by paragraph and sends as separate blocks
     """
-    add_splitted_text(text, create_page_data['children'])
+    add_splitted_text(text, create_page_data["children"])
+
+    # parse entities and save them as bookmarks
+    entities = message.entities or message.caption_entities
+    entities = list(filter(lambda x: x.url is not None, entities))
+    add_entities(entities, create_page_data["children"])
 
     # Send metadata regarding the post as formatted yaml code
-
     content = yaml.dump(message_dict, allow_unicode=True)
     create_page_data["children"].append(
         {
@@ -154,6 +181,7 @@ def create_page(token, db_id, message):
         },
     )
 
+    # if post has self link, send it as url. else, look for the first link in the text
     if url:
         create_page_data["properties"]["URL"] = {"url": url}
     elif len(links) > 0:
