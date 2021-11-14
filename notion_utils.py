@@ -10,7 +10,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def add_links_blocks(links, children_block):
+def add_links_blocks(links, children_block, tags):
 
     if len(links) > 0:
         # If text has markdown links, add the text regarding that
@@ -31,15 +31,24 @@ def add_links_blocks(links, children_block):
             md_text = lnk[0].strip().replace("\u200b", "") or lnk[1]
             md_url = lnk[1]
 
+            print(md_url)
+
+            if re.search("youtube.com|youtu.be", md_url):
+                tags.append({"name": "Youtube"})
+                children_block.append({"type": "embed", "embed": {"url": md_url}})
+
+                print("found youtube")
+                continue
+
             children_block.append(
                 {
                     "type": "paragraph",
                     "paragraph": {
                         "text": [
                             {
-                                "type": "text",
-                                "plain_text": md_text,
-                                "href": md_url,
+                                # "type": "text",
+                                # "plain_text": md_text,
+                                # "href": md_url,
                                 "text": {
                                     "content": md_text,
                                     "link": {"url": md_url},
@@ -156,7 +165,9 @@ def create_page(token, db_id, message):
     each link.
     """
     links = re.findall(r"\[(.*)\]\((.*)\)", text_markdown)
-    add_links_blocks(links, create_page_data["children"])
+
+    tags = create_page_data["properties"]["Tags"]["multi_select"]
+    add_links_blocks(links, create_page_data["children"], tags)
 
     """
     If the text is too big, you won't be able to send it in one piece to Notion.
